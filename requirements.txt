@@ -6,3 +6,4 @@ nltk
 wordcloud
 PyPDF2
 python-docx
+https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.4/en_core_web_sm-3.7.4.tar.gz
