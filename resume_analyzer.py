@@ -1,17 +1,9 @@
-# Check and install required packages
-try:
-    import matplotlib.pyplot as plt
-except ImportError:
-    import sys
-    import subprocess
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "matplotlib"])
-    import matplotlib.pyplot as plt
-
 import streamlit as st
 import pandas as pd
 import spacy
 from spacy.matcher import PhraseMatcher
 from collections import Counter
+import matplotlib.pyplot as plt
 import base64
 import re
 from docx import Document
@@ -22,6 +14,47 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from wordcloud import WordCloud
 import textwrap
+import sys
+
+# Check for required packages
+missing_packages = []
+try:
+    import matplotlib.pyplot as plt
+except ImportError:
+    missing_packages.append("matplotlib")
+
+try:
+    import spacy
+except ImportError:
+    missing_packages.append("spacy")
+
+try:
+    from PyPDF2 import PdfReader
+except ImportError:
+    missing_packages.append("PyPDF2")
+
+try:
+    from docx import Document
+except ImportError:
+    missing_packages.append("python-docx")
+
+try:
+    from wordcloud import WordCloud
+except ImportError:
+    missing_packages.append("wordcloud")
+
+# Show error if any packages are missing
+if missing_packages:
+    st.error(f"""
+    **Missing required packages: {', '.join(missing_packages)}**
+    
+    Please install them using:
+    ```
+    pip install {' '.join(missing_packages)}
+    ```
+    Then restart the app.
+    """)
+    st.stop()
 
 # Download NLTK resources with error handling
 try:
@@ -39,6 +72,8 @@ st.set_page_config(
     page_title="Resume Analyzer Pro",
     layout="wide"
 )
+
+# ... [The rest of your code remains unchanged from the previous version] ...
 
 # Custom styling with enhanced gradient effects and animations
 st.markdown("""
