@@ -12,7 +12,7 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from wordcloud import WordCloud
 import textwrap
-import sys
+import os
 
 # Download NLTK resources
 nltk.download('punkt', quiet=True)
@@ -209,21 +209,27 @@ def clean_text(text):
     text = re.sub(r'\s+', ' ', text)
     return text.strip().lower()
 
+# Improved NLP model loading
+def load_nlp_model():
+    try:
+        return spacy.load("en_core_web_sm")
+    except:
+        try:
+            # Try to download the model if not found
+            import subprocess
+            import sys
+            subprocess.run([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
+            return spacy.load("en_core_web_sm")
+        except Exception as e:
+            st.error(f"Failed to load NLP model: {str(e)}")
+            return None
+
 # Function to analyze resume
 def analyze_resume(resume_text, job_description):
-    # Load spaCy model with fallback
-    try:
-        nlp = spacy.load("en_core_web_sm")
-    except OSError:
-        st.warning("Downloading spaCy model... This may take a few minutes.")
-        try:
-            import subprocess
-            subprocess.run([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
-            nlp = spacy.load("en_core_web_sm")
-            st.success("Model downloaded successfully!")
-        except Exception as e:
-            st.error(f"Failed to download model: {str(e)}")
-            return None
+    # Load spaCy model
+    nlp = load_nlp_model()
+    if nlp is None:
+        return None
     
     # Process texts
     resume_doc = nlp(clean_text(resume_text))
@@ -236,7 +242,7 @@ def analyze_resume(resume_text, job_description):
     
     # Count keyword frequency
     keyword_counter = Counter(job_keywords)
-    top_keywords = [word for word, count in keyword_counter.most_common(15)]  # Reduced for performance
+    top_keywords = [word for word, count in keyword_counter.most_common(15)]
     
     # Create phrase matcher
     matcher = PhraseMatcher(nlp.vocab, attr="LEMMA")
@@ -432,7 +438,7 @@ def main():
     st.markdown("""
     <div class="footer">
         <p>Powered by spaCy, NLTK, and Streamlit • Data processed locally</p>
-        <p>Resume Analyzer Pro v1.5</p>
+        <p>Resume Analyzer Pro v2.0</p>
     </div>
     """, unsafe_allow_html=True)
 
