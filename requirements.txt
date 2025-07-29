@@ -1,4 +1,8 @@
 streamlit
 spacy
-pdfplumber
-docx2txt
+pandas
+matplotlib
+nltk
+wordcloud
+PyPDF2
+python-docx
