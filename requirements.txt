@@ -1,3 +1,4 @@
 streamlit
 spacy
-pdfminer.six
+pdfplumber
+docx2txt
