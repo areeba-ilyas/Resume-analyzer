@@ -1,7 +1,5 @@
 streamlit==1.33.0
 spacy==3.7.4
-https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.4/en_core_web_sm-3.7.4.tar.gz
-pandas==2.2.2
 matplotlib==3.8.4
 nltk==3.8.1
 wordcloud==1.9.3
