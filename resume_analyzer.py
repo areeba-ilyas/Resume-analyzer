@@ -4,7 +4,6 @@ import spacy
 from spacy.matcher import PhraseMatcher
 from collections import Counter
 import matplotlib.pyplot as plt
-import base64
 import re
 from docx import Document
 from PyPDF2 import PdfReader
@@ -14,47 +13,7 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from wordcloud import WordCloud
 import textwrap
-import sys
-
-# Check for required packages
-missing_packages = []
-try:
-    import matplotlib.pyplot as plt
-except ImportError:
-    missing_packages.append("matplotlib")
-
-try:
-    import spacy
-except ImportError:
-    missing_packages.append("spacy")
-
-try:
-    from PyPDF2 import PdfReader
-except ImportError:
-    missing_packages.append("PyPDF2")
-
-try:
-    from docx import Document
-except ImportError:
-    missing_packages.append("python-docx")
-
-try:
-    from wordcloud import WordCloud
-except ImportError:
-    missing_packages.append("wordcloud")
-
-# Show error if any packages are missing
-if missing_packages:
-    st.error(f"""
-    **Missing required packages: {', '.join(missing_packages)}**
-    
-    Please install them using:
-    ```
-    pip install {' '.join(missing_packages)}
-    ```
-    Then restart the app.
-    """)
-    st.stop()
+import os
 
 # Download NLTK resources with error handling
 try:
@@ -73,6 +32,7 @@ st.set_page_config(
     layout="wide"
 )
 
+# Custom styling
 st.markdown("""
 <style>
     :root {
@@ -149,13 +109,6 @@ st.markdown("""
         box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
         margin-bottom: 30px;
         border-top: 5px solid var(--primary);
-        animation: pulse 2s infinite;
-    }
-    
-    @keyframes pulse {
-        0% { box-shadow: 0 0 0 0 rgba(67, 97, 238, 0.4); }
-        70% { box-shadow: 0 0 0 15px rgba(67, 97, 238, 0); }
-        100% { box-shadow: 0 0 0 0 rgba(67, 97, 238, 0); }
     }
     
     .progress-container {
@@ -214,11 +167,6 @@ st.markdown("""
         padding: 20px;
         border-radius: 12px;
         margin: 15px 0;
-        transition: transform 0.3s ease;
-    }
-    
-    .suggestion-card:hover {
-        transform: translateX(10px);
     }
     
     .footer {
@@ -270,7 +218,6 @@ st.markdown("""
         margin: 5px;
     }
     
-    /* Responsive adjustments */
     @media (max-width: 768px) {
         .stats-container {
             flex-direction: column;
@@ -316,35 +263,39 @@ def extract_text(file):
 
 # Function to clean text
 def clean_text(text):
-    # Remove non-ASCII characters
     text = re.sub(r'[^\x00-\x7F]+', ' ', text)
-    # Remove extra spaces
     text = re.sub(r'\s+', ' ', text)
-    # Remove special characters except those needed for context
     text = re.sub(r'[^a-zA-Z0-9\s.,;:!?\-]', '', text)
     return text.strip().lower()
 
 # Function to analyze resume
 def analyze_resume(resume_text, job_description):
+    # Load spaCy model with error handling
     try:
-        # Load English NLP model
         nlp = spacy.load("en_core_web_sm")
     except OSError:
-        st.error("Spacy model 'en_core_web_sm' not found. Please install it by running: `python -m spacy download en_core_web_sm`")
-        return None
+        st.warning("Downloading spaCy model... This may take a few minutes.")
+        try:
+            import subprocess
+            subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
+            nlp = spacy.load("en_core_web_sm")
+            st.success("Model downloaded successfully!")
+        except Exception as e:
+            st.error(f"Failed to download model: {str(e)}")
+            return None
     
     # Process texts
     resume_doc = nlp(clean_text(resume_text))
     job_doc = nlp(clean_text(job_description))
     
-    # Extract important keywords from job description
+    # Extract important keywords
     job_keywords = [token.lemma_.lower() for token in job_doc 
                    if not token.is_stop and not token.is_punct 
                    and len(token.text) > 2 and token.pos_ in ['NOUN', 'PROPN', 'ADJ', 'VERB']]
     
     # Count keyword frequency
     keyword_counter = Counter(job_keywords)
-    top_keywords = [word for word, count in keyword_counter.most_common(40)]
+    top_keywords = [word for word, count in keyword_counter.most_common(30)]
     
     # Create phrase matcher
     matcher = PhraseMatcher(nlp.vocab, attr="LEMMA")
@@ -368,14 +319,14 @@ def analyze_resume(resume_text, job_description):
     if match_percentage < 70:
         suggestions.append(f"Add these keywords to your resume: {', '.join(missing_keywords[:5])}")
     if len(resume_text.split()) < 300:
-        suggestions.append("Your resume seems too short. Consider adding more details about your experience and skills.")
+        suggestions.append("Your resume seems too short. Consider adding more details.")
     if len(resume_text.split()) > 800:
-        suggestions.append("Your resume might be too long. Try to keep it concise (1-2 pages).")
+        suggestions.append("Your resume might be too long. Try to keep it concise.")
     
     # Extract skills section
     skills_section = ""
     for sent in resume_doc.sents:
-        if "skill" in sent.text.lower() or "expertise" in sent.text.lower() or "technical" in sent.text.lower():
+        if "skill" in sent.text.lower() or "expertise" in sent.text.lower():
             skills_section = sent.text
             break
     
@@ -383,36 +334,6 @@ def analyze_resume(resume_text, job_description):
     word_count = len(resume_text.split())
     sentence_count = len(list(resume_doc.sents))
     avg_sentence_length = round(word_count / sentence_count, 1) if sentence_count > 0 else 0
-    
-    # Calculate readability score (Flesch Reading Ease)
-    total_words = word_count
-    total_sentences = sentence_count
-    
-    # Improved syllable counting
-    def count_syllables(word):
-        word = word.lower()
-        count = 0
-        vowels = "aeiouy"
-        if word[0] in vowels:
-            count += 1
-        for index in range(1, len(word)):
-            if word[index] in vowels and word[index - 1] not in vowels:
-                count += 1
-        if word.endswith("e"):
-            count -= 1
-        if word.endswith("le") and len(word) > 2 and word[-3] not in vowels:
-            count += 1
-        if count == 0:
-            count = 1
-        return count
-
-    total_syllables = sum(count_syllables(word) for word in resume_text.split() if word.isalpha())
-    
-    if total_words > 0 and total_sentences > 0:
-        readability = 206.835 - 1.015 * (total_words/total_sentences) - 84.6 * (total_syllables/total_words)
-        readability = round(readability, 1)
-    else:
-        readability = 0
     
     return {
         "match_percentage": match_percentage,
@@ -423,19 +344,19 @@ def analyze_resume(resume_text, job_description):
         "skills_section": skills_section,
         "word_count": word_count,
         "sentence_count": sentence_count,
-        "avg_sentence_length": avg_sentence_length,
-        "readability": readability
+        "avg_sentence_length": avg_sentence_length
     }
 
 # Function to create word cloud
 def create_wordcloud(text, title):
-    # Preprocess text for word cloud
+    # Preprocess text
     text = clean_text(text)
     stop_words = set(stopwords.words('english'))
     word_tokens = word_tokenize(text)
     filtered_text = [word for word in word_tokens if word.lower() not in stop_words and len(word) > 2]
     processed_text = " ".join(filtered_text)
     
+    # Generate word cloud
     wordcloud = WordCloud(width=800, height=400, 
                           background_color='white',
                           colormap='viridis',
@@ -446,7 +367,7 @@ def create_wordcloud(text, title):
     plt.axis("off")
     return plt
 
-# Function to wrap text for better display
+# Function to wrap text
 def wrap_text(text, width=80):
     return "\n".join(textwrap.wrap(text, width=width))
 
@@ -461,7 +382,6 @@ def main():
             <span class="feature-badge">ATS Optimization</span>
             <span class="feature-badge">Match Scoring</span>
             <span class="feature-badge">Word Clouds</span>
-            <span class="feature-badge">Actionable Tips</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -474,38 +394,31 @@ def main():
         st.subheader("📄 Upload Your Resume")
         resume_file = st.file_uploader("Supported formats: PDF, DOCX, TXT", 
                                       type=["pdf", "docx", "txt"],
-                                      key="resume_upload",
-                                      help="Upload your resume in PDF, DOCX, or TXT format")
+                                      key="resume_upload")
         resume_text = ""
         if resume_file:
-            with st.spinner("Extracting text from your resume..."):
+            with st.spinner("Extracting text..."):
                 resume_text = extract_text(resume_file)
             if resume_text:
-                st.success("Resume successfully uploaded!")
-                with st.expander("View Resume Text"):
-                    st.text(wrap_text(resume_text[:1500] + "..." if len(resume_text) > 1500 else resume_text))
+                st.success("Resume uploaded successfully!")
                 st.info(f"Resume contains {len(resume_text.split())} words")
             else:
-                st.warning("Could not extract text from the resume file")
+                st.warning("Could not extract text from the file")
         st.markdown('</div>', unsafe_allow_html=True)
     
     with col2:
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.subheader("💼 Enter Job Description")
-        job_description = st.text_area("Paste the job description here", height=300,
-                                      placeholder="Paste the job description text here...",
-                                      help="Copy and paste the job description you're applying for")
+        job_description = st.text_area("Paste the job description here", height=300)
         if job_description:
             st.success("Job description added!")
-            with st.expander("View Job Description"):
-                st.text(wrap_text(job_description[:1500] + "..." if len(job_description) > 1500 else job_description))
             st.info(f"Job description contains {len(job_description.split())} words")
         st.markdown('</div>', unsafe_allow_html=True)
     
     # Analysis button
     if st.button("🚀 Analyze Resume Match", use_container_width=True, type="primary"):
         if resume_text and job_description:
-            with st.spinner("Analyzing your resume against the job description..."):
+            with st.spinner("Analyzing..."):
                 analysis = analyze_resume(resume_text, job_description)
                 
                 if analysis is None:
@@ -520,9 +433,9 @@ def main():
                 if analysis["match_percentage"] >= 80:
                     st.success("🎉 Excellent match! Your resume aligns well with the job requirements.")
                 elif analysis["match_percentage"] >= 60:
-                    st.warning("👍 Good match, but could be improved. See suggestions below.")
+                    st.warning("👍 Good match, but could be improved.")
                 else:
-                    st.error("⚠️ Low match. Your resume needs significant improvements to align with this job.")
+                    st.error("⚠️ Low match. Your resume needs improvements.")
                 st.markdown('</div>', unsafe_allow_html=True)
                 
                 # Resume statistics
@@ -542,21 +455,12 @@ def main():
                             <div class="stat-value">{avg_length}</div>
                             <div class="stat-label">Avg. Sentence Length</div>
                         </div>
-                        <div class="stat-card">
-                            <div class="stat-value">{readability}</div>
-                            <div class="stat-label">Readability Score</div>
-                        </div>
                     </div>
-                    <p style="text-align: center; margin-top: 15px; font-size: 0.9rem; color: #64748b;">
-                        Readability Score: 90-100 (Very Easy), 80-89 (Easy), 70-79 (Fairly Easy), 
-                        60-69 (Standard), 50-59 (Fairly Difficult), 30-49 (Difficult), 0-29 (Very Confusing)
-                    </p>
                 </div>
                 """.format(
                     word_count=analysis["word_count"],
                     sentence_count=analysis["sentence_count"],
-                    avg_length=analysis["avg_sentence_length"],
-                    readability=analysis["readability"]
+                    avg_length=analysis["avg_sentence_length"]
                 ), unsafe_allow_html=True)
                 
                 # Display keyword analysis
@@ -567,17 +471,9 @@ def main():
                     st.subheader("✅ Keywords in Your Resume")
                     st.markdown(f"Found {len(analysis['matched_keywords'])}/{len(analysis['top_keywords'])} important keywords")
                     st.markdown('<div class="keyword-list">', unsafe_allow_html=True)
-                    for keyword in analysis['matched_keywords'][:30]:
+                    for keyword in analysis['matched_keywords'][:20]:
                         st.markdown(f'<div class="keyword">{keyword}</div>', unsafe_allow_html=True)
                     st.markdown('</div>', unsafe_allow_html=True)
-                    
-                    # Skills section analysis
-                    if analysis['skills_section']:
-                        st.subheader("🔧 Skills Section")
-                        st.info(wrap_text(analysis['skills_section']))
-                    else:
-                        st.warning("No skills section found in your resume. Add a dedicated skills section!")
-                    
                     st.markdown('</div>', unsafe_allow_html=True)
                 
                 with col4:
@@ -596,75 +492,25 @@ def main():
                             st.markdown(f'<div class="suggestion-card">{suggestion}</div>', unsafe_allow_html=True)
                     else:
                         st.success("Your resume is well optimized for this job!")
-                    
-                    # Additional tips
-                    st.markdown("""
-                    <div class="suggestion-card">
-                        <strong>Action Tip:</strong> Add a "Skills" section that includes 10-15 relevant skills
-                    </div>
-                    <div class="suggestion-card">
-                        <strong>Action Tip:</strong> Use the same terminology as the job description (e.g., "JavaScript" vs "JS")
-                    </div>
-                    <div class="suggestion-card">
-                        <strong>Action Tip:</strong> Quantify achievements with numbers (e.g., "Increased sales by 25%")
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
                     st.markdown('</div>', unsafe_allow_html=True)
                 
                 # Word clouds
                 st.markdown('<div class="card">', unsafe_allow_html=True)
                 st.subheader("☁️ Keyword Visualization")
-                
                 col5, col6 = st.columns(2)
                 with col5:
-                    if job_description:
-                        st.pyplot(create_wordcloud(job_description, "Job Description Keywords"))
+                    st.pyplot(create_wordcloud(job_description, "Job Description Keywords"))
                 with col6:
-                    if resume_text:
-                        st.pyplot(create_wordcloud(resume_text, "Resume Keywords"))
-                
+                    st.pyplot(create_wordcloud(resume_text, "Resume Keywords"))
                 st.markdown('</div>', unsafe_allow_html=True)
-                
-                # Generate ATS-friendly resume tips
-                st.markdown('<div class="card">', unsafe_allow_html=True)
-                st.subheader("💡 Tips for ATS-Friendly Resumes")
-                st.markdown("""
-                <div class="suggestion-card">
-                    <strong>1. Use Standard Section Headings:</strong> "Work Experience", "Education", "Skills", "Projects"
-                </div>
-                <div class="suggestion-card">
-                    <strong>2. Include Keywords Strategically:</strong> Use exact keywords from the job description throughout your resume
-                </div>
-                <div class="suggestion-card">
-                    <strong>3. Avoid Graphics and Tables:</strong> ATS systems can't read images, charts, or complex tables
-                </div>
-                <div class="suggestion-card">
-                    <strong>4. Use Simple Formatting:</strong> Stick to standard fonts (Arial, Calibri, Times New Roman), 10-12pt size
-                </div>
-                <div class="suggestion-card">
-                    <strong>5. File Format Matters:</strong> Save as PDF (most ATS-friendly) or DOCX
-                </div>
-                <div class="suggestion-card">
-                    <strong>6. Use Standard File Names:</strong> "John_Doe_Resume.pdf" instead of "Resume_Final_v3.pdf"
-                </div>
-                <div class="suggestion-card">
-                    <strong>7. Avoid Columns:</strong> Single column layouts work best with ATS
-                </div>
-                """, unsafe_allow_html=True)
-                st.markdown('</div>', unsafe_allow_html=True)
-                
         else:
-            if not resume_text:
-                st.error("Please upload a resume file")
-            if not job_description:
-                st.error("Please enter a job description")
+            st.error("Please upload a resume and enter a job description")
     
     # Footer
     st.markdown("""
     <div class="footer">
         <p>Powered by spaCy, NLTK, and Streamlit • Your data is processed locally and not stored</p>
-        <p>Resume Analyzer Pro v1.3 • For best results, use PDF or DOCX files</p>
+        <p>Resume Analyzer Pro v1.3</p>
     </div>
     """, unsafe_allow_html=True)
 
