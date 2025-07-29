@@ -73,9 +73,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# ... [The rest of your code remains unchanged from the previous version] ...
-
-# Custom styling with enhanced gradient effects and animations
 st.markdown("""
 <style>
     :root {
