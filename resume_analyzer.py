@@ -211,12 +211,19 @@ def clean_text(text):
 
 # Function to analyze resume
 def analyze_resume(resume_text, job_description):
-    # Load spaCy model
+    # Load spaCy model with fallback
     try:
         nlp = spacy.load("en_core_web_sm")
-    except Exception as e:
-        st.error(f"Error loading NLP model: {str(e)}")
-        return None
+    except OSError:
+        st.warning("Downloading spaCy model... This may take a few minutes.")
+        try:
+            import subprocess
+            subprocess.run([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
+            nlp = spacy.load("en_core_web_sm")
+            st.success("Model downloaded successfully!")
+        except Exception as e:
+            st.error(f"Failed to download model: {str(e)}")
+            return None
     
     # Process texts
     resume_doc = nlp(clean_text(resume_text))
@@ -229,7 +236,7 @@ def analyze_resume(resume_text, job_description):
     
     # Count keyword frequency
     keyword_counter = Counter(job_keywords)
-    top_keywords = [word for word, count in keyword_counter.most_common(20)]
+    top_keywords = [word for word, count in keyword_counter.most_common(15)]  # Reduced for performance
     
     # Create phrase matcher
     matcher = PhraseMatcher(nlp.vocab, attr="LEMMA")
@@ -425,7 +432,7 @@ def main():
     st.markdown("""
     <div class="footer">
         <p>Powered by spaCy, NLTK, and Streamlit • Data processed locally</p>
-        <p>Resume Analyzer Pro v1.4</p>
+        <p>Resume Analyzer Pro v1.5</p>
     </div>
     """, unsafe_allow_html=True)
 
