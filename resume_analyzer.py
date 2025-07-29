@@ -1,9 +1,17 @@
+# Check and install required packages
+try:
+    import matplotlib.pyplot as plt
+except ImportError:
+    import sys
+    import subprocess
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "matplotlib"])
+    import matplotlib.pyplot as plt
+
 import streamlit as st
 import pandas as pd
 import spacy
 from spacy.matcher import PhraseMatcher
 from collections import Counter
-import matplotlib.pyplot as plt
 import base64
 import re
 from docx import Document
@@ -15,14 +23,20 @@ from nltk.tokenize import word_tokenize
 from wordcloud import WordCloud
 import textwrap
 
-# Download NLTK resources
-nltk.download('punkt')
-nltk.download('stopwords')
+# Download NLTK resources with error handling
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt')
+    
+try:
+    nltk.data.find('corpora/stopwords')
+except LookupError:
+    nltk.download('stopwords')
 
 # Set up the app
 st.set_page_config(
     page_title="Resume Analyzer Pro",
-    
     layout="wide"
 )
 
@@ -223,6 +237,19 @@ st.markdown("""
         display: inline-block;
         margin: 5px;
     }
+    
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .stats-container {
+            flex-direction: column;
+        }
+        .stat-card {
+            margin: 10px 0;
+        }
+        .header h1 {
+            font-size: 2.5rem;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -328,7 +355,26 @@ def analyze_resume(resume_text, job_description):
     # Calculate readability score (Flesch Reading Ease)
     total_words = word_count
     total_sentences = sentence_count
-    total_syllables = sum([len(re.findall(r'[aeiouy]+', word, re.I)) for word in resume_text.split()])
+    
+    # Improved syllable counting
+    def count_syllables(word):
+        word = word.lower()
+        count = 0
+        vowels = "aeiouy"
+        if word[0] in vowels:
+            count += 1
+        for index in range(1, len(word)):
+            if word[index] in vowels and word[index - 1] not in vowels:
+                count += 1
+        if word.endswith("e"):
+            count -= 1
+        if word.endswith("le") and len(word) > 2 and word[-3] not in vowels:
+            count += 1
+        if count == 0:
+            count = 1
+        return count
+
+    total_syllables = sum(count_syllables(word) for word in resume_text.split() if word.isalpha())
     
     if total_words > 0 and total_sentences > 0:
         readability = 206.835 - 1.015 * (total_words/total_sentences) - 84.6 * (total_syllables/total_words)
@@ -351,10 +397,17 @@ def analyze_resume(resume_text, job_description):
 
 # Function to create word cloud
 def create_wordcloud(text, title):
+    # Preprocess text for word cloud
+    text = clean_text(text)
+    stop_words = set(stopwords.words('english'))
+    word_tokens = word_tokenize(text)
+    filtered_text = [word for word in word_tokens if word.lower() not in stop_words and len(word) > 2]
+    processed_text = " ".join(filtered_text)
+    
     wordcloud = WordCloud(width=800, height=400, 
                           background_color='white',
                           colormap='viridis',
-                          max_words=100).generate(text)
+                          max_words=100).generate(processed_text)
     plt.figure(figsize=(12, 6))
     plt.imshow(wordcloud, interpolation='bilinear')
     plt.title(title, fontsize=22, pad=20)
@@ -369,7 +422,7 @@ def wrap_text(text, width=80):
 def main():
     st.markdown("""
     <div class="header">
-        <h1> Resume Analyzer Pro</h1>
+        <h1>Resume Analyzer Pro</h1>
         <p>Optimize your resume for Applicant Tracking Systems (ATS) and job requirements</p>
         <div style="margin-top: 15px;">
             <span class="feature-badge">Keyword Analysis</span>
@@ -386,16 +439,17 @@ def main():
     
     with col1:
         st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.subheader(" Upload Your Resume")
+        st.subheader("📄 Upload Your Resume")
         resume_file = st.file_uploader("Supported formats: PDF, DOCX, TXT", 
                                       type=["pdf", "docx", "txt"],
-                                      key="resume_upload")
+                                      key="resume_upload",
+                                      help="Upload your resume in PDF, DOCX, or TXT format")
         resume_text = ""
         if resume_file:
             with st.spinner("Extracting text from your resume..."):
                 resume_text = extract_text(resume_file)
             if resume_text:
-                st.success(" Resume successfully uploaded!")
+                st.success("Resume successfully uploaded!")
                 with st.expander("View Resume Text"):
                     st.text(wrap_text(resume_text[:1500] + "..." if len(resume_text) > 1500 else resume_text))
                 st.info(f"Resume contains {len(resume_text.split())} words")
@@ -406,16 +460,18 @@ def main():
     with col2:
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.subheader("💼 Enter Job Description")
-        job_description = st.text_area("Paste the job description here", height=300)
+        job_description = st.text_area("Paste the job description here", height=300,
+                                      placeholder="Paste the job description text here...",
+                                      help="Copy and paste the job description you're applying for")
         if job_description:
-            st.success(" Job description added!")
+            st.success("Job description added!")
             with st.expander("View Job Description"):
                 st.text(wrap_text(job_description[:1500] + "..." if len(job_description) > 1500 else job_description))
             st.info(f"Job description contains {len(job_description.split())} words")
         st.markdown('</div>', unsafe_allow_html=True)
     
     # Analysis button
-    if st.button(" Analyze Resume Match", use_container_width=True, type="primary"):
+    if st.button("🚀 Analyze Resume Match", use_container_width=True, type="primary"):
         if resume_text and job_description:
             with st.spinner("Analyzing your resume against the job description..."):
                 analysis = analyze_resume(resume_text, job_description)
@@ -459,6 +515,10 @@ def main():
                             <div class="stat-label">Readability Score</div>
                         </div>
                     </div>
+                    <p style="text-align: center; margin-top: 15px; font-size: 0.9rem; color: #64748b;">
+                        Readability Score: 90-100 (Very Easy), 80-89 (Easy), 70-79 (Fairly Easy), 
+                        60-69 (Standard), 50-59 (Fairly Difficult), 30-49 (Difficult), 0-29 (Very Confusing)
+                    </p>
                 </div>
                 """.format(
                     word_count=analysis["word_count"],
@@ -522,7 +582,7 @@ def main():
                 
                 # Word clouds
                 st.markdown('<div class="card">', unsafe_allow_html=True)
-                st.subheader(" Keyword Visualization")
+                st.subheader("☁️ Keyword Visualization")
                 
                 col5, col6 = st.columns(2)
                 with col5:
@@ -563,13 +623,16 @@ def main():
                 st.markdown('</div>', unsafe_allow_html=True)
                 
         else:
-            st.error("Please upload a resume and enter a job description to analyze")
+            if not resume_text:
+                st.error("Please upload a resume file")
+            if not job_description:
+                st.error("Please enter a job description")
     
     # Footer
     st.markdown("""
     <div class="footer">
         <p>Powered by spaCy, NLTK, and Streamlit • Your data is processed locally and not stored</p>
-        <p>Resume Analyzer Pro v1.2 • For best results, use PDF or DOCX files</p>
+        <p>Resume Analyzer Pro v1.3 • For best results, use PDF or DOCX files</p>
     </div>
     """, unsafe_allow_html=True)
 
