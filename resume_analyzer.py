@@ -1,5 +1,42 @@
+import sys
+import subprocess
 import streamlit as st
-import spacy
+
+# Install required packages if missing
+try:
+    import spacy
+except ImportError:
+    st.warning("Installing required packages... This may take a few minutes.")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "spacy==3.7.4"])
+    import spacy
+
+# Download NLTK resources
+try:
+    import nltk
+    nltk.download('punkt', quiet=True)
+    nltk.download('stopwords', quiet=True)
+except ImportError:
+    st.warning("Installing NLTK...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "nltk"])
+    import nltk
+    nltk.download('punkt', quiet=True)
+    nltk.download('stopwords', quiet=True)
+
+# Install other required packages
+required_packages = [
+    "matplotlib==3.8.4",
+    "wordcloud==1.9.3",
+    "PyPDF2==3.0.1",
+    "python-docx==1.1.0"
+]
+
+for package in required_packages:
+    try:
+        __import__(package.split('==')[0])
+    except ImportError:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+
+# Now import all other modules
 from spacy.matcher import PhraseMatcher
 from collections import Counter
 import matplotlib.pyplot as plt
@@ -7,17 +44,10 @@ import re
 from docx import Document
 from PyPDF2 import PdfReader
 import io
-import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from wordcloud import WordCloud
 import textwrap
-import sys
-import subprocess
-
-# Download NLTK resources
-nltk.download('punkt', quiet=True)
-nltk.download('stopwords', quiet=True)
 
 # Set up the app
 st.set_page_config(
@@ -443,7 +473,7 @@ def main():
     st.markdown("""
     <div class="footer">
         <p>Powered by spaCy, NLTK, and Streamlit • Data processed locally</p>
-        <p>Resume Analyzer Pro v2.1</p>
+        <p>Resume Analyzer Pro v2.2</p>
     </div>
     """, unsafe_allow_html=True)
 
