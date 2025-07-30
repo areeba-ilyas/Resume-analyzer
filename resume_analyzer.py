@@ -12,7 +12,8 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from wordcloud import WordCloud
 import textwrap
-import os
+import sys
+import subprocess
 
 # Download NLTK resources
 nltk.download('punkt', quiet=True)
@@ -209,25 +210,29 @@ def clean_text(text):
     text = re.sub(r'\s+', ' ', text)
     return text.strip().lower()
 
-# Improved NLP model loading
-def load_nlp_model():
+# Function to install and load spaCy model
+def load_spacy_model():
     try:
+        # First try to load the model normally
         return spacy.load("en_core_web_sm")
-    except:
+    except OSError:
+        # If model is not found, install it directly
+        st.warning("Downloading spaCy model... This may take a few minutes.")
         try:
-            # Try to download the model if not found
-            import subprocess
-            import sys
-            subprocess.run([sys.executable, "-m", "spacy", "download", "en_core_web_sm"])
+            # Install model using pip
+            subprocess.run([sys.executable, "-m", "pip", "install", "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0.tar.gz"])
             return spacy.load("en_core_web_sm")
         except Exception as e:
-            st.error(f"Failed to load NLP model: {str(e)}")
+            st.error(f"Failed to download model: {str(e)}")
             return None
+    except Exception as e:
+        st.error(f"Error loading NLP model: {str(e)}")
+        return None
 
 # Function to analyze resume
 def analyze_resume(resume_text, job_description):
     # Load spaCy model
-    nlp = load_nlp_model()
+    nlp = load_spacy_model()
     if nlp is None:
         return None
     
@@ -438,7 +443,7 @@ def main():
     st.markdown("""
     <div class="footer">
         <p>Powered by spaCy, NLTK, and Streamlit • Data processed locally</p>
-        <p>Resume Analyzer Pro v2.0</p>
+        <p>Resume Analyzer Pro v2.1</p>
     </div>
     """, unsafe_allow_html=True)
 
